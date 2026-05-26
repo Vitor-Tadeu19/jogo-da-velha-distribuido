@@ -17,16 +17,28 @@ public class ClientHandler implements Runnable {
     private BufferedReader in;
 
     public ClientHandler(Socket socket, char playerSymbol, GameSession session) {
+
         this.socket = socket;
         this.playerSymbol = playerSymbol;
         this.session = session;
+
+        try {
+            this.out = new PrintWriter(socket.getOutputStream(), true);
+            this.in = new BufferedReader(
+                    new InputStreamReader(socket.getInputStream())
+            );
+        } catch (IOException e) {
+            throw new RuntimeException(
+                    "Erro ao inicializar comunicação do jogador "
+                            + playerSymbol,
+                    e
+            );
+        }
     }
 
     @Override
     public void run() {
         try {
-            out = new PrintWriter(socket.getOutputStream(), true);
-            in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
 
             send(MessageProtocol.BEM_VINDO + " " + playerSymbol);
 
