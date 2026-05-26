@@ -1,4 +1,11 @@
 package server;
 
 public class ServerMain {
+
+    public static void main(String[] args) {
+        int port = 5000;
+
+        GameServer server = new GameServer(port);
+        server.start();
+    }
 }
