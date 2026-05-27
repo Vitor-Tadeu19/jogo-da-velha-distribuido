@@ -3,7 +3,7 @@ package client;
 public class ClientMain {
 
     public static void main(String[] args) {
-        String host = "localhost";
+        String host = "10.8.184.12";
         int port = 5000;
 
         if (args.length >= 1) {
