@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Jogo da Velha</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: system-ui, sans-serif;
+            background: #f5f5f5;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+            color: #222;
+        }
+
+        h1 {
+            font-size: 22px;
+            font-weight: 600;
+            margin-bottom: 24px;
+        }
+
+        .card {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 12px;
+            padding: 28px;
+            width: 100%;
+            max-width: 400px;
+        }
+
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            color: #555;
+            margin-bottom: 20px;
+        }
+
+        .dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: #ccc;
+            flex-shrink: 0;
+        }
+        .dot.ok { background: #22c55e; }
+        .dot.wait { background: #f59e0b; animation: blink 1s infinite; }
+        .dot.err { background: #ef4444; }
+
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+        .field { margin-bottom: 14px; }
+        .field label { display: block; font-size: 13px; color: #555; margin-bottom: 4px; }
+        .field input {
+            width: 100%;
+            padding: 9px 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .field input:focus { border-color: #888; }
+
+        button {
+            width: 100%;
+            padding: 10px;
+            background: #222;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:hover { background: #444; }
+        button:disabled { background: #aaa; cursor: not-allowed; }
+
+        .badge {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            margin-left: 8px;
+        }
+        .badge-x { background: #dbeafe; color: #1d4ed8; }
+        .badge-o { background: #fef3c7; color: #b45309; }
+
+        .turn {
+            text-align: center;
+            font-size: 14px;
+            font-weight: 500;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            background: #f5f5f5;
+            color: #555;
+        }
+        .turn.yours { background: #dcfce7; color: #15803d; }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+
+        .cell {
+            aspect-ratio: 1;
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 36px;
+            font-weight: 700;
+            cursor: default;
+            transition: background 0.15s;
+        }
+
+        .cell.clickable { cursor: pointer; }
+        .cell.clickable:hover { background: #e5e7eb; }
+        .cell.x { color: #1d4ed8; }
+        .cell.o { color: #b45309; }
+
+        .end {
+            text-align: center;
+            padding: 20px 0 8px;
+        }
+        .end-msg {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 16px;
+        }
+        .end-msg.win { color: #15803d; }
+        .end-msg.lose { color: #dc2626; }
+        .end-msg.draw { color: #b45309; }
+
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+<h1>Jogo da Velha</h1>
+
+<div class="card">
+
+    <div class="status">
+        <div class="dot" id="dot"></div>
+        <span id="statusText">Desconectado</span>
+        <span id="badge" class="badge hidden"></span>
+    </div>
+
+    <!-- Connect -->
+    <div id="screenConnect">
+        <div class="field">
+            <label>IP do servidor Java</label>
+            <input id="javaHost" value="localhost" placeholder="ex: 192.168.0.10"/>
+        </div>
+        <div class="field">
+            <label>IP da bridge</label>
+            <input id="wsHost" value="localhost" placeholder="ex: 192.168.0.10"/>
+        </div>
+        <button onclick="connect()">Conectar</button>
+    </div>
+
+    <!-- Game -->
+    <div id="screenGame" class="hidden">
+
+        <div class="turn" id="turn">Aguardando...</div>
+
+        <div class="board" id="board"></div>
+
+        <div id="endSection" class="hidden">
+            <div class="end">
+                <div class="end-msg" id="endMsg"></div>
+                <button onclick="reset()">Sair</button>
+            </div>
+        </div>
+
+    </div>
+
+</div>
+
+<script>
+    let ws, mySymbol, isMyTurn = false, gameOver = false, boardState = Array(9).fill('');
+    const $ = id => document.getElementById(id);
+
+    function setStatus(state, text) {
+        $('dot').className = 'dot ' + state;
+        $('statusText').textContent = text;
+    }
+
+    function showGame() {
+        $('screenConnect').classList.add('hidden');
+        $('screenGame').classList.remove('hidden');
+    }
+
+    function buildBoard() {
+        const board = $('board');
+        board.innerHTML = '';
+        for (let i = 0; i < 9; i++) {
+            const cell = document.createElement('div');
+            cell.className = 'cell';
+            cell.dataset.idx = i;
+            cell.addEventListener('click', () => onCellClick(i));
+            board.appendChild(cell);
+        }
+    }
+
+    function renderBoard(serialized) {
+        boardState = serialized.split('').map(c => c === '-' ? '' : c);
+        const cells = $('board').children;
+        for (let i = 0; i < 9; i++) {
+            const val = boardState[i];
+            cells[i].textContent = val;
+            cells[i].className = 'cell' + (val === 'X' ? ' x' : val === 'O' ? ' o' : '');
+            if (!val && isMyTurn && !gameOver) cells[i].classList.add('clickable');
+        }
+    }
+
+    function updateClickable() {
+        const cells = $('board').children;
+        for (let i = 0; i < 9; i++)
+            cells[i].classList.toggle('clickable', isMyTurn && !boardState[i] && !gameOver);
+    }
+
+    function onCellClick(idx) {
+        if (!isMyTurn || boardState[idx] || gameOver) return;
+        ws.send(`JOGADA ${Math.floor(idx/3)} ${idx%3}`);
+        isMyTurn = false;
+        updateClickable();
+        $('turn').className = 'turn';
+        $('turn').textContent = 'Aguardando adversÃ¡rio...';
+    }
+
+    function handleMessage(msg) {
+        if (msg.startsWith('BEM_VINDO')) {
+            mySymbol = msg.split(' ')[1];
+            const badge = $('badge');
+            badge.textContent = 'Jogador ' + mySymbol;
+            badge.className = 'badge badge-' + mySymbol.toLowerCase();
+            badge.classList.remove('hidden');
+            setStatus('wait', 'Aguardando adversÃ¡rio...');
+            showGame();
+            buildBoard();
+            return;
+        }
+
+        if (msg.startsWith('TABULEIRO')) { renderBoard(msg.split(' ')[1]); return; }
+
+        if (msg.startsWith('SUA_VEZ')) {
+            isMyTurn = true; gameOver = false;
+            updateClickable();
+            $('turn').className = 'turn yours';
+            $('turn').textContent = 'Sua vez!';
+            setStatus('ok', 'Conectado');
+            return;
+        }
+
+        if (msg.startsWith('AGUARDE')) {
+            isMyTurn = false; updateClickable();
+            $('turn').className = 'turn';
+            $('turn').textContent = 'Vez do adversÃ¡rio...';
+            return;
+        }
+
+        if (msg.startsWith('JOGADA_INVALIDA')) {
+            isMyTurn = true; updateClickable();
+            $('turn').className = 'turn yours';
+            $('turn').textContent = 'PosiÃ§Ã£o invÃ¡lida, tente novamente';
+            return;
+        }
+
+        if (msg.startsWith('FIM')) {
+            const result = msg.slice(3).trim();
+            gameOver = true; isMyTurn = false; updateClickable();
+            $('turn').className = 'turn';
+            $('turn').textContent = 'Fim de jogo';
+            const endMsg = $('endMsg');
+            if (result.includes('venceu')) {
+                const winner = result.match(/Jogador (\w)/)?.[1];
+                endMsg.className = 'end-msg ' + (winner === mySymbol ? 'win' : 'lose');
+                endMsg.textContent = winner === mySymbol ? 'VocÃª venceu! ðŸŽ‰' : 'VocÃª perdeu.';
+            } else {
+                endMsg.className = 'end-msg draw';
+                endMsg.textContent = 'Empate!';
+            }
+            $('endSection').classList.remove('hidden');
+            return;
+        }
+
+        if (msg.startsWith('ERRO')) {
+            setStatus('err', msg.slice(4).trim());
+        }
+    }
+
+    function connect() {
+        const javaHost = $('javaHost').value.trim() || 'localhost';
+        const wsHost = $('wsHost').value.trim() || 'localhost';
+        const url = `ws://${wsHost}:8080`;
+
+        setStatus('wait', 'Conectando...');
+
+        ws = new WebSocket(url);
+
+        ws.onopen = () => {
+            // primeira mensagem: manda o IP do Java para a bridge
+            ws.send('CONNECT ' + javaHost);
+            setStatus('wait', 'Aguardando adversÃ¡rio...');
+        };
+
+        ws.onmessage = e => handleMessage(e.data.trim());
+        ws.onerror = () => setStatus('err', 'Falha na conexÃ£o com a bridge');
+        ws.onclose = () => setStatus('err', 'Desconectado');
+    }
+
+    function reset() {
+        ws && ws.close();
+        ws = null; mySymbol = null; isMyTurn = false; gameOver = false;
+        boardState = Array(9).fill('');
+        $('badge').classList.add('hidden');
+        $('endSection').classList.add('hidden');
+        $('screenGame').classList.add('hidden');
+        $('screenConnect').classList.remove('hidden');
+        setStatus('', 'Desconectado');
+    }
+</script>
+</body>
+</html>

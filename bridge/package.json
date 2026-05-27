@@ -1,0 +1,12 @@
+{
+  "name": "jogo-da-velha-bridge",
+  "version": "1.0.0",
+  "description": "WebSocket bridge para o servidor Java do Jogo da Velha",
+  "main": "bridge.js",
+  "scripts": {
+    "start": "node bridge.js"
+  },
+  "dependencies": {
+    "ws": "^8.16.0"
+  }
+}
